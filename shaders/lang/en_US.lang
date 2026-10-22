@@ -373,3 +373,16 @@ option.AV_PLANET_VISIBILITY=Planet visibility
 option.AV_BH_FLOW_STABILITY=Stable gas flow (no long-term distortion)
 value.AV_BH_FLOW_STABILITY.0=Off (original V23)
 value.AV_BH_FLOW_STABILITY.1=On (recommended)
+
+screen.AURORA_LIVING_STARS=Living Stars (Aurora Viva)
+option.AV_LIVING_STARS=Enable living stars (V26)
+value.AV_LIVING_STARS.0=Classic V25 stars
+value.AV_LIVING_STARS.1=Living stars
+option.AV_STAR_DENSITY=Star density
+option.AV_STAR_VARIETY=Star color variety
+option.AV_STAR_TWINKLE=Twinkle strength
+
+# Aurora Viva V26.1.3: celestial motion
+option.AV_CELESTIAL_SMOOTH_TIME=Smooth celestial motion (sub-tick)
+value.AV_CELESTIAL_SMOOTH_TIME.0=Old tick movement (compare)
+value.AV_CELESTIAL_SMOOTH_TIME.1=Smooth motion (recommended)

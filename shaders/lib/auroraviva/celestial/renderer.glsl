@@ -10,10 +10,10 @@ vec3 av_mystical_celestials(vec3 sky, vec3 ray, AVCelestialContext ctx) {
 
     // V24 atmosphere tint is applied once inside get_sky().
 
-    vec3 gold = av_orbital_direction(AV_TAU * (dayPhase + 0.50 + days * 0.004), 0.24, 0.16);
-    vec3 blue = av_orbital_direction(AV_TAU * (dayPhase + 0.28 + days * 0.019), 2.10, -0.24);
-    vec3 purple = av_orbital_direction(AV_TAU * (dayPhase + 0.68 - days * 0.011), 3.95, 0.30);
-    vec3 red = av_orbital_direction(AV_TAU * (dayPhase + 0.12 + days * 0.031), 5.20, -0.18);
+    vec3 gold = av_orbital_direction(AV_TAU * (dayPhase + 0.50 + (days + dayPhase) * 0.004), 0.24, 0.16);
+    vec3 blue = av_orbital_direction(AV_TAU * (dayPhase + 0.28 + (days + dayPhase) * 0.019), 2.10, -0.24);
+    vec3 purple = av_orbital_direction(AV_TAU * (dayPhase + 0.68 - (days + dayPhase) * 0.011), 3.95, 0.30);
+    vec3 red = av_orbital_direction(AV_TAU * (dayPhase + 0.12 + (days + dayPhase) * 0.031), 5.20, -0.18);
 
     float goldGlare = 1.0 - smoothstep(0.66, 0.985, dot(gold, sunDir));
     float blueGlare = 1.0 - smoothstep(0.66, 0.985, dot(blue, sunDir));

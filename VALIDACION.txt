@@ -1,0 +1,1 @@
+Identidad de GLSL V24.1 verificada al expandir las cuatro directivas #include del refactor. Verificar compilacion dentro de Minecraft/Iris; no disponible en este entorno.

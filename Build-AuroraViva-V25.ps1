@@ -1,7 +1,7 @@
-# Aurora Viva V25 - Fase 2.4: Celestial Core build from modular source.
+# Aurora Viva V25 - Fase 2.5: Integracion de modulos from modular source.
 # The generated ZIP always gets a NEW name (_r001, _r002, ...).
 # CelestialContext changes the source structure but keeps the original formulas.
-# Strict V25.4 SHA256 guard protects the generated GLSL.
+# Strict V25.5 SHA256 guard protects the generated GLSL.
 param(
     [string]$RepoPath = 'C:\Proyectos\Fkin-Shader',
     [switch]$InstallToModrinth
@@ -20,7 +20,7 @@ if ($InstallToModrinth -and -not (Test-Path -LiteralPath $profileShaderpacks -Pa
 # Allocate a unique ZIP filename WITHOUT ever overwriting earlier versions.
 $outputZip = $null
 for ($n = 1; $n -le 999; $n++) {
-    $fileName = ('AuroraViva_V25_4_CelestialCore_r{0:D3}.zip' -f $n)
+    $fileName = ('AuroraViva_V25_5_Integracion_r{0:D3}.zip' -f $n)
     $candidate = Join-Path $root $fileName
     $installed = Join-Path $profileShaderpacks $fileName
     if (-not (Test-Path -LiteralPath $candidate) -and -not (Test-Path -LiteralPath $installed)) {
@@ -31,9 +31,9 @@ for ($n = 1; $n -le 999; $n++) {
 if ($null -eq $outputZip) { throw 'Se agotaron los nombres de ZIP r001..r999.' }
 
 # Do not modify the source tree; expand includes only in a temporary build tree.
-$stage = Join-Path $env:TEMP ('AuroraViva_V25_4_build_' + [guid]::NewGuid().ToString('N'))
+$stage = Join-Path $env:TEMP ('AuroraViva_V25_5_build_' + [guid]::NewGuid().ToString('N'))
 $tempZip = Join-Path $root ('AuroraViva_TEMP_' + [guid]::NewGuid().ToString('N') + '.zip')
-$expected = '3bbb91231cd259e1830d7bb22cb37eb238be2f50dccc6956acdaefbf171e9601'
+$expected = 'ca14ff1ce029f29107fc59972bf3204a1c9c5dc6e97700da10db496ce57525b4'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 try {
@@ -59,7 +59,7 @@ try {
     if ($content.Contains('#include "/lib/auroraviva/celestial/')) { throw 'Quedaron includes celestes sin expandir.' }
     [System.IO.File]::WriteAllText($stageProgram, $content, $utf8)
     $hash = (Get-FileHash -LiteralPath $stageProgram -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($hash -ne $expected) { throw "Shader reconstruido difiere de V25.4. SHA: $hash. ZIP cancelado." }
+    if ($hash -ne $expected) { throw "Shader reconstruido difiere de V25.5. SHA: $hash. ZIP cancelado." }
     foreach ($extra in @('LICENSE', 'LICENSE-APACHE', 'README_AURORA_VIVA.txt')) {
         $p = Join-Path $root $extra
         if (Test-Path -LiteralPath $p -PathType Leaf) { Copy-Item -LiteralPath $p -Destination $stage -Force }
@@ -107,9 +107,19 @@ try {
             finally { $sha.Dispose() }
         } finally { $stream.Dispose() }
         if ($insideHash -ne $expected) { throw "SHA256 incorrecto dentro del ZIP: $insideHash" }
-        Write-Host "Validacion correcta: $($zip.Entries.Count) entradas y SHA256 esperado de V25.4." -ForegroundColor Green
+        Write-Host "Validacion correcta: $($zip.Entries.Count) entradas y SHA256 esperado de V25.5." -ForegroundColor Green
     } finally { $zip.Dispose() }
 
+    # Ensure shared core is declared before stars and atmosphere, without duplicates.
+    $ctxPos = $content.IndexOf('struct AVCelestialContext')
+    $atmPos = $content.IndexOf('vec3 get_sky(')
+    $starPos = $content.IndexOf('float get_stars(')
+    if ($ctxPos -lt 0 -or $atmPos -le $ctxPos -or $starPos -le $atmPos) {
+        throw 'Orden GLSL incorrecto: contexto debe preceder a atmosfera y estrellas.'
+    }
+    if (-not $content.Contains('AVCelestialContext skyContext = av_celestial_context();')) {
+        throw 'El renderer no construye el contexto compartido.'
+    }
     # Abort before publish if a required section of the shared context is absent.
     if (-not $content.Contains('AVCelestialContext av_celestial_context()')) {
         throw 'Falta el estado celeste compartido en el GLSL generado.'

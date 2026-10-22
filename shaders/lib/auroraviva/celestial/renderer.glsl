@@ -1,9 +1,8 @@
 // Aurora Viva V25 Celestial Foundation — unchanged V24.1 code
-vec3 av_mystical_celestials(vec3 sky, vec3 ray) {
+vec3 av_mystical_celestials(vec3 sky, vec3 ray, AVCelestialContext ctx) {
     if (ray.y < -0.003) return sky;
 
     // Shared day, weather and solar geometry. Equivalent to V25.3 expressions.
-    AVCelestialContext ctx = av_celestial_context();
     float dayPhase = ctx.dayPhase;
     float days = ctx.dayIndex;
     float visibility = ctx.visibility;

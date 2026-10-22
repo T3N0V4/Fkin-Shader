@@ -1,11 +1,11 @@
 // Aurora Viva V25 Fase 2 - atmosphere extraction, logic unchanged
-vec3 get_sky(vec3 ViewPosN, vec3 SunGlare) {
+vec3 get_sky(vec3 ViewPosN, vec3 SunGlare, AVCelestialContext ctx) {
     float upDot = dot(ViewPosN, gbufferModelView[1].xyz) + 0.1;
     vec3 baseColor = mix(SKY_TOP, SKY_GROUND + SunGlare, fogify(max(upDot, 0.0), 0.03));
 
     #ifdef DIMENSION_OVERWORLD
         // V24. Atmospheric depth only; stars, clouds and moon geometry remain untouched.
-        float night = clamp(nightStrength, 0.0, 1.0);
+        float night = ctx.night;
         float altitude = clamp(dot(ViewPosN, gbufferModelView[1].xyz), 0.0, 1.0);
         float horizon = exp(-altitude * 5.0);
         float zenith = smoothstep(0.14, 0.93, altitude);
@@ -28,7 +28,7 @@ vec3 get_sky(vec3 ViewPosN, vec3 SunGlare) {
                      * night * depth * weather;
 
         // Twilight retains Aurora Viva's warmth, with a restrained violet horizon.
-        float twilight = clamp(sunriseStrength + sunsetStrength, 0.0, 1.0);
+        float twilight = ctx.twilight;
         baseColor += vec3(0.0065, 0.0037, 0.0075) * horizon * twilight
                      * AV_NIGHT_HORIZON_GLOW * weather;
     #endif

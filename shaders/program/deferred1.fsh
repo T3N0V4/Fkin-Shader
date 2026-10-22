@@ -869,6 +869,10 @@ vec3 get_sun_glare(float Dist) {
 
     return SunGlare * pow2(Dist * 0.5 + 0.5) * Visibility;
 }
+// V25.5: declare world time and shared state before sky functions.
+uniform int worldTime;
+uniform int worldDay;
+#include "/lib/auroraviva/celestial/core.glsl"
 #include "/lib/auroraviva/celestial/atmosphere.glsl"
 #include "/lib/auroraviva/celestial/stars.glsl"
 vec3 get_aurora(vec3 PlayerPosN, float Dither) {
@@ -935,9 +939,9 @@ vec3 get_end_sky(vec3 ViewPosN, vec3 PlayerPosN) {
 
     return Final;
 }
-vec3 get_sky_main(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare) {
+vec3 get_sky_main(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, AVCelestialContext ctx) {
     #ifdef DIMENSION_OVERWORLD
-        vec3 SkyColor = get_sky(ViewPosN, SunGlare);
+        vec3 SkyColor = get_sky(ViewPosN, SunGlare, ctx);
     #elif defined DIMENSION_END
         vec3 SkyColor = get_end_sky(ViewPosN, PlayerPosN);
     #elif defined DIMENSION_NETHER
@@ -1442,11 +1446,7 @@ vec3 get_outline(vec3 Color, vec3 ScreenPos, ivec2 FragCoord) {
     }
     return Color;
 }
-uniform int worldTime;
-uniform int worldDay;
-
-
-#include "/lib/auroraviva/celestial/core.glsl"
+// V25.5: celestial shared context moved before atmosphere/stars.
 #include "/lib/auroraviva/celestial/planets.glsl"
 #include "/lib/auroraviva/celestial/blackhole.glsl"
 #include "/lib/auroraviva/celestial/renderer.glsl"
@@ -1468,10 +1468,13 @@ void main() {
     vec3 ViewPosN = normalize(ViewPos);
     vec3 PlayerPosN = normalize(PlayerPos);
 
+    // One shared observational context for the sky passes.
+    AVCelestialContext skyContext = av_celestial_context();
+
     float VdotL = dot(ViewPosN, sunPosN);
     vec3 SunGlare = get_sun_glare(VdotL);
 
-    vec3 SkyColor = get_sky_main(ViewPosN, PlayerPosN, SunGlare);
+    vec3 SkyColor = get_sky_main(ViewPosN, PlayerPosN, SunGlare, skyContext);
     SkyColor += (ign(gl_FragCoord.xy, false) - 0.5) / 255;
 
     float Dither = dither(gl_FragCoord.xy);
@@ -1494,18 +1497,18 @@ void main() {
                 #ifdef DIMENSION_OVERWORLD
                     #ifndef CUSTOM_SKYBOXES
                         // Warp the star field only, leaving foreground clouds unchanged.
-                        Color.rgb += get_stars(av_lensed_star_ray(PlayerPosN));
+                        Color.rgb += get_stars(av_lensed_star_ray(PlayerPosN), skyContext);
                     #else
-                        Color.rgb += get_stars(PlayerPos);
+                        Color.rgb += get_stars(PlayerPos, skyContext);
                     #endif
                 #elif defined DIMENSION_END
-                    Color.rgb += get_stars(PlayerPos);
+                    Color.rgb += get_stars(PlayerPos, skyContext);
                 #endif
 
                 #ifdef DIMENSION_OVERWORLD
                     // Planets occlude stars but remain behind BH gas and clouds.
                     #ifndef CUSTOM_SKYBOXES
-                        Color.rgb = av_mystical_celestials(Color.rgb, PlayerPosN);
+                        Color.rgb = av_mystical_celestials(Color.rgb, PlayerPosN, skyContext);
                         Color.rgb = av_night_black_hole(Color.rgb, PlayerPosN);
                     #endif
                     Color.rgb = get_clouds(ViewPosN, PlayerPos, PlayerPosN, SunGlare, Color.rgb, Dither);

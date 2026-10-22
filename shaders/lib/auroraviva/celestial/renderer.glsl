@@ -2,15 +2,12 @@
 vec3 av_mystical_celestials(vec3 sky, vec3 ray) {
     if (ray.y < -0.003) return sky;
 
-    float dayPhase = float(worldTime) / 24000.0;
-    float days = float(worldDay);
-    float twilight = clamp(sunriseStrength + sunsetStrength, 0.0, 1.0);
-    float weather = 1.0 - rainStrength * 0.84;
-    float night = clamp(nightStrength, 0.0, 1.0);
-    float day = clamp(dayStrength, 0.0, 1.0);
-
-    float visibility = clamp(0.15 * day + 0.88 * twilight + night, 0.0, 1.0) * weather;
-    vec3 sunDir = normalize(mat3(gbufferModelViewInverse) * sunPosN);
+    // Shared day, weather and solar geometry. Equivalent to V25.3 expressions.
+    AVCelestialContext ctx = av_celestial_context();
+    float dayPhase = ctx.dayPhase;
+    float days = ctx.dayIndex;
+    float visibility = ctx.visibility;
+    vec3 sunDir = ctx.sunDir;
 
     // V24 atmosphere tint is applied once inside get_sky().
 

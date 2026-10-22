@@ -1,0 +1,19 @@
+AURORA VIVA V23 - FLOW
+
+Partimos de V22. Sin modificar nubes, planetas, movimiento celeste, lente,
+colores generales, ni efectos ajenos al agujero negro.
+
+La materia del disco rota por radios: mas rapido junto al centro, mas lento
+lejos. Sus texturas se desplazan con el material y se deforman con turbulencias
+coherentes. No hay destellos aleatorios ni parpadeo global.
+
+Iris > Sky > Black Hole:
+- Accretion gas flow speed: 0.0 pausa, 1.0 natural, 1.6 rapido, 2.0 intenso.
+- Flow turbulence: 0.0 flujo uniforme, 1.0 natural, 1.5 mas rugoso.
+- Gas ray-tracing quality: 56/72/88 (72 recomendado).
+
+El efecto puede verse sutil a simple vista. Apunta al mismo sector del
+agujero negro durante 20-30 segundos para apreciar como viajan las vetas.
+
+Se valida fuente, ZIP y simulaciones numericas; Minecraft/Iris no se ejecuta
+en este entorno y no se pueden medir FPS reales.

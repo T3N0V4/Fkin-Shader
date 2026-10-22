@@ -1,0 +1,23 @@
+AURORA VIVA V22 - Front / Back Accretion Disk
+
+Base: V21 intacta como respaldo.
+
+Cambios:
+- Cada punto del gas mantiene su profundidad 3D calculada por el trazador.
+- Diferenciacion real de la cara proxima y lejana del disco segun la posicion
+  del material respecto de la camara, NO arcos pintados en pantalla.
+- La cara delantera absorbe algo mas de luz, tiene densidad mayor y domina
+  en el primer plano. El gas de atras es mas fino y tenue.
+- Desplazamiento hacia el rojo gravitacional aproximado para gas interior.
+- Conserva orbita nocturna, planetas, nubes y lente de estrellas.
+
+Iris > Sky > Black Hole > Front / back disk separation:
+  0.0 = sin separacion V22 (mas parecido a V21)
+  0.5 = sutil
+  1.0 = natural / recomendado
+  1.5 = mas marcado
+
+Gas ray-tracing quality: 56, 72, 88.
+No se hicieron cambios al mundo ni a los mods del servidor.
+Se verifico el ZIP y el codigo; la compilacion GPU y el aspecto real en
+Minecraft deben probarse en el equipo del jugador.

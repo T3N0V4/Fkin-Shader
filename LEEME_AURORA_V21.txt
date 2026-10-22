@@ -1,0 +1,12 @@
+AURORA VIVA V21 - Disk Structure
+
+Base: V20. Esta version afina el disco de acrecion:
+- perfil mas fino (menos forma de nube inflada)
+- mas bandas y vetas internas
+- mas asimetria por Doppler
+- menos sobreexposicion del disco completo
+
+Verificacion fuera de Minecraft:
+- previews CPU para 56 / 72 / 88 pasos
+- la silueta se mantiene estable en las tres opciones
+- 72 sigue siendo el equilibrio recomendado

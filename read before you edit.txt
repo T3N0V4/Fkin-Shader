@@ -1,0 +1,63 @@
+Hello! If you want to edit this shader, you should read the license first. 
+
+THE FOLLOWING TEXT IS A PARAPHRASE OF THE LICENSE AND DOES NOT GUARANTEE LEGAL COMPLIANCE: 
+In short, you can redistribute & modify mellow with the condition that you keep the original license & copyright notice (so just keep the whole LICENSE file intact, and add your own license on top of what's already there). 
+I would appreciate if you credited me on the curseforge/modrinth page. Also please don't use the mellow name (eg. 'Mellow+' would *not* be cool with me) or any other assets (screenshots, logo) for your project. 
+
+Another thing to note is that releases on Modrinth and Curseforge are ran through a script that optimizes them for better compile times. This makes the code significantly less readable.
+Make sure you grab the code from Codeberg instead: https://codeberg.org/TheCMK/mellow-shader
+
+
+
+The "program" subdirectory contains files that are shared across all 3 minecraft dimensions. 
+All the files in the world-1, world0 and world1 folders do is include their program/ counterpart.
+They also have a #define DIMENSION_whatever directive. This way, if you want something to happen in the overworld only, you can check if DIMENSION_OVERWORLD is defined. 
+
+Most of the lighting is done in gbuffers using the "/global/lighting/lighting.glsl" file. 
+Composite passes handle post-processing, sky rendering, fog and clouds. You can find information about what each pass does inside the file itself.
+
+All used uniforms are already defined in "/lib/all_the_uniforms.glsl". Since they are named with the "camelCase" convention, they do not conflict with functions (named with "snake_case") or variables/structs ("PascalCase").
+Files in the lib/ directory are usually short functions or definitions that are useful for many things. They are included at the beginning of every file to ease development.
+Files in the global/ directory are used for specific effects, or groups of similar effects. They are only included when needed.
+
+Buffer usage (might not always be up to date):
+colortex0: Main buffer
+colortex1: Bloom
+colortex2: SMAA main
+colortex3: Blocky cloud texture (deferred) + SMAA area (composite)
+gaux1: Reflections & TAA
+colortex5: Quarter-res, half precision depth (deferred) + SMAA search (composite)
+colortex6: Volumetric clouds noise texture (deferred + gbuffers)
+colortex7: Blocky cloud texture (gbuffers) + LUT (composite)
+
+Aurora Viva Mystic Sky V3: adds a subtle mystical sky tint and three slow-moving planets in the overworld.
+
+
+Aurora Viva V6: planets now have richer surfaces, halos, cleaner phases and improved rings.
+
+
+Aurora Viva V7: adds a configurable black hole and accretion disk. Prepared for a future moon-devouring event.
+
+
+Aurora Viva V8: more natural celestial lighting and subtler black hole presence.
+
+
+Aurora Viva V10: black hole lighting refined with living filaments, softer layered halo and subtle ambient spill.
+
+
+Aurora Viva V11: black hole made denser with stronger silhouette, local absorption and a more solid front disk.
+
+
+Aurora Viva V12: accretion disk now has procedural texture, dust lanes and stronger material variation.
+
+
+Aurora Viva V13 - Realistic Gas
+-------------------------------
+The black hole now samples multiple noise-map frequencies to form irregular
+clouds of orbiting gas. The dark horizon is opaque, stars are properly
+occluded, and the disk no longer relies on perfect sine-wave concentric stripes.
+Black Hole > Gas texture detail controls surface variation.
+This is an artistic real-time shader, not physically accurate ray tracing.
+
+
+Aurora Viva V15: rebuilt black hole from V13 backup with layered volumetric gas and without V14 fake top/bottom flares.

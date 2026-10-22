@@ -1,0 +1,12 @@
+Aurora Viva - Agujero negro nocturno Fix3
+
+El agujero negro esta ahora junto a la Luna.
+Aparece solo de noche y sigue la posicion real de la Luna.
+No depende de cuantos dias tenga el mundo.
+
+Probar: /time set 18000 (medianoche), buscar la Luna y mirar alrededor.
+         /time set 6000 (mediodia), desaparece.
+Opciones en Iris: Sky > Black Hole > Distance from the Moon.
+
+Aun NO existe el evento que devora la Luna; esto prepara la posicion.
+Este pack se usa solamente en el cliente, no en el servidor.

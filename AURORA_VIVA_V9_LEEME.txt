@@ -1,0 +1,10 @@
+Aurora Viva V9 - Halo Natural
+
+Base: Aurora Viva NaturalLight V8.
+Solo modifica el halo, el disco y el anillo luminoso del agujero negro.
+Mantiene los ciclos celestes, la Luna, los planetas, las nubes, los reflejos y Distant Horizons.
+Menu Iris: Sky > Black Hole > Accretion glow / Halo softness.
+Glow controla intensidad; Halo softness controla la dispersion del halo.
+El evento de devorar la Luna aun NO esta activado.
+NOTA: glow visual en el cielo; no ilumina fisicamente los bloques del mundo.
+No ha sido renderizado ni compilado mediante Iris en esta maquina.

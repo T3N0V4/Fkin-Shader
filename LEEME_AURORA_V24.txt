@@ -1,0 +1,24 @@
+AURORA VIVA V24 - NIGHT SKY & PLANETS
+
+Base intacta: Aurora Viva V23 Living Accretion. El agujero negro NO fue modificado.
+Nubes y efectos de clima sin cambios.
+
+NOVEDADES
+- Atmósfera nocturna: profundidad índigo, horizonte azul-violeta, resplandor lunar tenue.
+- Transiciones día / crepúsculo / noche suaves y sin cambios fuertes al sol.
+- Cuatro planetas con colores más sobrios, texturas de material menos repetitivas,
+  terminador solar y aros mucho menos saturados. Se conservan sus órbitas.
+
+IRIS > SKY > NIGHT SKY & PLANETS (V24)
+- Night sky depth = 1.0
+- Night horizon atmosphere = 0.75
+- Unified planet materials = 1 (0 = anterior, aunque mantiene nueva paleta)
+- Planet atmosphere = 0.75
+- Planet visibility = 1.0
+
+PRUEBAS: estructura del pack, preprocesado del programa Overworld y prueba matemática
+sobre diferentes alturas/horas. Sin prueba gráfica dentro de Minecraft.
+Si una opción o efecto no aparece, verificar configuración previa de Iris y latest.log.
+
+NOTA: Esta versión no corrige las tramas del gas del agujero negro al acelerar mucho
+la simulación; conserva la V23 para no mezclar cambios.

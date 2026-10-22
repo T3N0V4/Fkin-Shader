@@ -1,0 +1,11 @@
+AURORA VIVA V20 - Shadow Trace
+
+Base: V19. Esta version mejora el centro del agujero negro para que no se vea
+como un disco negro plano: agrega una sombra con profundidad, un borde de captura
+mas natural y mayor absorcion del gas interno.
+
+Verificado fuera de Minecraft con previsualizaciones CPU para las calidades:
+56, 72 y 88 pasos. Quité 40 del selector porque la silueta del centro se degradaba demasiado. 72 sigue siendo el punto
+de equilibrio recomendado y 88 solamente suaviza detalles finos.
+
+No se modificaron los controles ya existentes en Iris.

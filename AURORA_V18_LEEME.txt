@@ -1,0 +1,12 @@
+Aurora Viva V18 - lente gravitacional (PRUEBA)
+
+* Base: Aurora Viva V17, guardada sin alterar como AuroraViva_V17_BACKUP.zip.
+* NUEVO: las estrellas del fondo se deforman alrededor del agujero negro,
+  con una formula aproximada de lente gravitacional (no ray tracing GR completo).
+* No se modifican nubes, terreno, luna, orbita nocturna ni efectos de iluminacion.
+* Iris > Shader Pack Settings > Sky > Black Hole:
+  - Gravitational star lensing: intensidad, 0.0 para desactivar.
+  - Star lens range: area de influencia medida en radios del horizonte.
+* El efecto se nota mas con zoom y estrellas despejadas. Las nubes lo pueden tapar.
+* Probado: integridad ZIP, cambios limitados y matematicas de desviacion.
+* Pendiente: prueba visual y de compilacion dentro de Iris/Minecraft.

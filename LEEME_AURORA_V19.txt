@@ -1,0 +1,16 @@
+AURORA VIVA V19 - Curved Light
+
+Esta version es una prueba del render del disco de acrecion con
+trazado aproximado de rayos (no una simulacion completa de relatividad general).
+
+En Iris > Sky > Black Hole:
+- Curved light through gas (V19): 1 = modelo nuevo, 0 = volver al render V18.
+- Gas ray-tracing quality: 40/56/72/88 pasos; 72 es el ajuste por defecto.
+
+Se conservan los colores cobrizos, el ciclo lunar, las nubes, los planetas
+y la distorsion de estrellas de la V18. El codigo se ejecuta solo en el cielo
+cercano al agujero negro para limitar el consumo.
+
+IMPORTANTE: No se pudo probar dentro de Minecraft ni medir FPS reales.
+Si el shader no compila, compartir latest.log para corregir errores concretos.
+La V18 original se mantiene intacta.

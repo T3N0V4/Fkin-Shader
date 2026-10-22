@@ -1,0 +1,11 @@
+Aurora Viva V24.1 — Stable Gas Flow
+
+Corrige la acumulacion de cizallamiento de los filamentos del disco del agujero negro tras varias noches o una sesion larga. El frameTimeCounter no se reinicia al dormir, asi que antes el diferencial de rotacion enrollaba infinitamente las texturas.
+
+Ahora hay dos campos de material desfasados que se mezclan en una transicion continua. El reinicio individual queda oculto, y mantiene movimiento sin rejillas acumulativas.
+
+Sky > Black Hole > Stable gas flow: ON (por defecto). OFF recupera el comportamiento anterior para comparar.
+
+El resto de Aurora Viva V24, incluido cielo, planetas, estrellas y nubes, no fue alterado.
+
+Validaciones: contenido ZIP, comparacion de archivos, preprocesado y continuidad numerica; no reemplazan una prueba en Minecraft/Iris.

@@ -89,6 +89,7 @@
 #define BORDER_FOG
 #define BORDER_FOG_STRENGTH 1.0 // [0.1 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 17.0 18.0 19.0 20.0 30.0 40.0 50.0]
 #define BORDER_FOG_FALLOFF 3 // [1 2 3 4 5]
+#define AV_DH_HORIZON_FADE_START 0.78 // [0.65 0.70 0.75 0.78 0.80 0.85 0.90 0.93 0.96]
 #define ATMOSPHERIC_FOG
 #define ATM_FOG_STRENGTH 0.22 // [0.0 0.01 0.02 0.03 0.04 0.05 0.06 0.07 0.08 0.09 0.1 0.11 0.12 0.13 0.14 0.15 0.16 0.17 0.18 0.19 0.2 0.21 0.22 0.23 0.24 0.25 0.26 0.27 0.28 0.29 0.3 0.31 0.32 0.33 0.34 0.35 0.36 0.37 0.38 0.39 0.4 0.41 0.42 0.43 0.44 0.45 0.46 0.47 0.48 0.49 0.5]
 #define UNDERWATER_FOG_STRENGTH 1.0 // [0.1 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0]
@@ -130,6 +131,8 @@
 #define CLOUD_SPEED 2 // [0 1 2 3 4 5 6]
 #define CLOUD_QUALITY 5 // [2 3 4 5 6 7 9]
 #define CLOUD_STYLE 2 // [0 1 2 3]
+#define AV_CLOUD_BASE_HEIGHT 360.0 // [240.0 280.0 320.0 360.0 420.0 480.0 560.0 640.0 800.0 1000.0]
+#define AV_CLOUD_LAYER_THICKNESS 200.0 // [100.0 160.0 200.0 240.0 320.0 400.0 500.0]
 #define AURORA_BOREALIS
 #define AURORA_STRENGTH 0.2 // [0.1 0.11 0.12 0.13 0.14 0.15 0.16 0.17 0.18 0.19 0.2 0.21 0.22 0.23 0.24 0.25 0.26 0.27 0.28 0.29 0.3 0.31 0.32 0.33 0.34 0.35 0.36 0.37 0.38 0.39 0.4 0.41 0.42 0.43 0.44 0.45 0.46 0.47 0.48 0.49 0.5]
 #define AURORA_HEIGHT 3.0 // [1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0]
@@ -1217,22 +1220,29 @@ vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGl
 
     return vec4(Scattering, Transmittance);
 }
-vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither) {
-    const float PLANE_TOP = 1500.0;
-    const float PLANE_BOTTOM = 1000.0;
+vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither, float maxDistance) {
+    // Aurora Viva V26.1.6: fixed WORLD Y, not a plane attached to the camera.
+    const float PLANE_BOTTOM = AV_CLOUD_BASE_HEIGHT;
+    const float PLANE_TOP = AV_CLOUD_BASE_HEIGHT + AV_CLOUD_LAYER_THICKNESS;
 
     const float CLOUD_EXTINCTION = 0.5;
     const float CLOUD_SCATTERING = CLOUD_EXTINCTION;
 
     const int SAMPLE_COUNT = 12;
-    int SampleCount = int(((1 - PlayerPosN.y) * 0.75 + 0.25) * SAMPLE_COUNT + 1);
+    int SampleCount = clamp(int(((1 - PlayerPosN.y) * 0.75 + 0.25) * SAMPLE_COUNT + 1), 2, SAMPLE_COUNT);
 
-    vec3 StartPos = PLANE_BOTTOM / PlayerPosN.y * PlayerPosN; 
-    vec3 EndPos = PLANE_TOP / PlayerPosN.y * PlayerPosN;
+    // Solve both intersections in camera-relative ray space. The volume is
+    // anchored to absolute world Y; rays going away from the layer do no work.
+    if (abs(PlayerPosN.y) < 0.0001) return vec4(0.0, 0.0, 0.0, 1.0);
+    float RayBottom = (PLANE_BOTTOM - cameraPosition.y) / PlayerPosN.y;
+    float RayTop = (PLANE_TOP - cameraPosition.y) / PlayerPosN.y;
+    float RayEnter = max(0.0, min(RayBottom, RayTop));
+    float RayExit = min(max(RayBottom, RayTop), maxDistance);
+    if (RayExit <= RayEnter + 0.001) return vec4(0.0, 0.0, 0.0, 1.0);
 
-    vec3 Step = (EndPos - StartPos) / SampleCount;
+    vec3 Step = PlayerPosN * ((RayExit - RayEnter) / float(SampleCount));
     float StepSize = length(Step);
-    vec3 Pos = Step * Dither + StartPos + vec3(cameraPosition.x, 0, cameraPosition.z);
+    vec3 Pos = cameraPosition + PlayerPosN * RayEnter + Step * Dither;
 
     vec3 Wind = frameTimeCounter * vec3(12, 0, 16) * CLOUD_SPEED;
     float CloudAmount = (CLOUD_AMOUNT - 12) / 10.0 + (rainStrength + thunderStrength * 0.5);
@@ -1246,7 +1256,8 @@ vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float 
 
         float Alt = rescale(PLANE_BOTTOM, PLANE_TOP, Pos.y);
         float HeightDensity = linstep(0.0, 0.75, 1 - Alt) * linstep(0.0, 0.2, Alt);
-        Base = pow(Base, 13 - CloudAmount * 5 + (1-HeightDensity) * 5);
+        float CoverageThreshold = clamp(0.42 - 0.08 * CloudAmount, 0.18, 0.64);
+        Base = smoothstep(CoverageThreshold, 0.90, Base) * HeightDensity * HeightDensity;
 
         if(Base < 1e-4) {
             Pos += Step;
@@ -1276,10 +1287,18 @@ vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float 
         Pos += Step;
     }
 
-    vec4 FinalColor = vec4(TotalScattering, TotalTransmittance);
-
+    // At grazing angles the layer spans many kilometres. Fade the far portion
+    // into exactly the same air color as the rest of the sky, no horizon band.
+    float distanceFade = 1.0 - smoothstep(1200.0, 3400.0, RayEnter);
+    vec4 FinalColor = vec4(TotalScattering * distanceFade,
+                           mix(1.0, TotalTransmittance, distanceFade));
     return FinalColor;
 }
+// Calls from water reflections and sky retain unbounded scene depth.
+vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither) {
+    return get_clouds_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, 1000000.0);
+}
+
 #ifdef DEFERRED
     #define BLOCKY_CLOUD_TEXTURE colortex3
 #else
@@ -1834,7 +1853,7 @@ vec3 get_lava_fog(float dist, vec3 color) {
     }
     return color;
 }
-vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor) {
+vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor, bool IsDH) {
     #ifdef DIMENSION_NETHER
         const int Falloff = max(0, BORDER_FOG_FALLOFF - 2);
     #else
@@ -1852,6 +1871,16 @@ vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor) {
 
     Strength = min(1, (1-smoothstep(FogEnd - 32, FogEnd - 16, Dist)) * exp(-3 * BORDER_FOG_STRENGTH * Strength));
 
+    // Smooth distant LOD silhouettes into the same computed sky. This is
+    // confined to DH depth pixels, so nearby terrain and water remain sharp.
+    #ifdef DISTANT_HORIZONS
+        if (IsDH) {
+            float DHEnd = float(dhRenderDistance);
+            float DHFade = smoothstep(DHEnd * AV_DH_HORIZON_FADE_START,
+                                      DHEnd * 0.995, Dist);
+            Strength *= (1.0 - DHFade);
+        }
+    #endif
     return mix(SkyColor, Color, Strength);
 }
 vec3 get_blindness_fog(float Dist, vec3 Color) {
@@ -1959,7 +1988,7 @@ vec3 get_fog_main(vec3 ScreenPos, vec3 PlayerPos, vec3 Color, float Depth, vec3 
 
     if (Depth < 1) {
         #if defined BORDER_FOG && !defined CUSTOM_SKYBOXES
-            Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor);
+            Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor, IsDH);
         #endif
     }
 

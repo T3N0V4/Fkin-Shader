@@ -13,7 +13,7 @@ vec3 get_lava_fog(float dist, vec3 color) {
     return color;
 }
 
-vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor) {
+vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor, bool IsDH) {
     #ifdef DIMENSION_NETHER
         const int Falloff = max(0, BORDER_FOG_FALLOFF - 2);
     #else
@@ -31,6 +31,16 @@ vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor) {
 
     Strength = min(1, (1-smoothstep(FogEnd - 32, FogEnd - 16, Dist)) * exp(-3 * BORDER_FOG_STRENGTH * Strength));
 
+    // Smooth distant LOD silhouettes into the same computed sky. This is
+    // confined to DH depth pixels, so nearby terrain and water remain sharp.
+    #ifdef DISTANT_HORIZONS
+        if (IsDH) {
+            float DHEnd = float(dhRenderDistance);
+            float DHFade = smoothstep(DHEnd * AV_DH_HORIZON_FADE_START,
+                                      DHEnd * 0.995, Dist);
+            Strength *= (1.0 - DHFade);
+        }
+    #endif
     return mix(SkyColor, Color, Strength);
 }
 
@@ -146,7 +156,7 @@ vec3 get_fog_main(vec3 ScreenPos, vec3 PlayerPos, vec3 Color, float Depth, vec3 
 
     if (Depth < 1) {
         #if defined BORDER_FOG && !defined CUSTOM_SKYBOXES
-            Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor);
+            Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor, IsDH);
         #endif
     }
 

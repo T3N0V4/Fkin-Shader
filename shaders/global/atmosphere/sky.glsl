@@ -1,3 +1,4 @@
+#include "/lib/auroraviva/atmosphere/gradient.glsl"
 float fogify(float x, float w) {
     return w / (x * x + w);
 }
@@ -693,8 +694,7 @@ vec3 get_sun_glare(float Dist) {
 }
 
 vec3 get_sky(vec3 ViewPosN, vec3 SunGlare) {
-    float upDot = dot(ViewPosN, gbufferModelView[1].xyz) + 0.1;
-    vec3 baseColor = mix(SKY_TOP, SKY_GROUND + SunGlare, fogify(max(upDot, 0.0), 0.03));
+    vec3 baseColor = av_atmosphere_gradient(ViewPosN, SunGlare);
 
     #ifdef DIMENSION_OVERWORLD
         // V24. Atmospheric depth only; stars, clouds and moon geometry remain untouched.

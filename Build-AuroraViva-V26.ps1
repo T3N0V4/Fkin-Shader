@@ -1,7 +1,7 @@
-# Aurora Viva V26.1.5 - Performance Core (same stars and image)
+# Aurora Viva V26.1.7 - Performance Core (same stars and image)
 # The generated ZIP always gets a NEW name (_r001, _r002, ...).
 # V25.5 source is tagged; this builder publishes the living-star preview.
-# Strict V26.1.5 SHA256 guard protects the generated GLSL.
+# Strict V26.1.7 SHA256 guard protects the generated GLSL.
 param(
     [string]$RepoPath = 'C:\Proyectos\Fkin-Shader',
     [switch]$InstallToModrinth
@@ -22,7 +22,7 @@ if ($InstallToModrinth -and -not (Test-Path -LiteralPath $profileShaderpacks -Pa
 # Allocate a unique ZIP filename WITHOUT ever overwriting earlier versions.
 $outputZip = $null
 for ($n = 1; $n -le 999; $n++) {
-    $fileName = ('AuroraViva_V26_1_5_PerformanceCore_r{0:D3}.zip' -f $n)
+    $fileName = ('AuroraViva_V26_1_7_CloudHorizon_r{0:D3}.zip' -f $n)
     $candidate = Join-Path $root $fileName
     $installed = Join-Path $profileShaderpacks $fileName
     if (-not (Test-Path -LiteralPath $candidate) -and -not (Test-Path -LiteralPath $installed)) {
@@ -33,9 +33,9 @@ for ($n = 1; $n -le 999; $n++) {
 if ($null -eq $outputZip) { throw 'Se agotaron los nombres de ZIP r001..r999.' }
 
 # Do not modify the source tree; expand includes only in a temporary build tree.
-$stage = Join-Path $env:TEMP ('AuroraViva_V26_1_5_build_' + [guid]::NewGuid().ToString('N'))
+$stage = Join-Path $env:TEMP ('AuroraViva_V26_1_7_build_' + [guid]::NewGuid().ToString('N'))
 $tempZip = Join-Path $root ('AuroraViva_TEMP_' + [guid]::NewGuid().ToString('N') + '.zip')
-$expected = '0eed1cce1fbc8d15a2e8be6c5bae80138a1d9d90a24f35b23141570ae1a69b08'
+$expected = 'd3702078197b8087e91896ca30423e4552da32ea825905de81044a3239b2bea3'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 try {
@@ -63,7 +63,7 @@ try {
     if ($content.Contains('#include "/lib/auroraviva/celestial/')) { throw 'Quedaron includes celestes sin expandir.' }
     [System.IO.File]::WriteAllText($stageProgram, $content, $utf8)
     $hash = (Get-FileHash -LiteralPath $stageProgram -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($hash -ne $expected) { throw "Shader reconstruido difiere de V26.1.5. SHA: $hash. ZIP cancelado." }
+    if ($hash -ne $expected) { throw "Shader reconstruido difiere de V26.1.7. SHA: $hash. ZIP cancelado." }
     foreach ($extra in @('LICENSE', 'LICENSE-APACHE', 'README_AURORA_VIVA.txt')) {
         $p = Join-Path $root $extra
         if (Test-Path -LiteralPath $p -PathType Leaf) { Copy-Item -LiteralPath $p -Destination $stage -Force }
@@ -113,7 +113,7 @@ try {
             finally { $sha.Dispose() }
         } finally { $stream.Dispose() }
         if ($insideHash -ne $expected) { throw "SHA256 incorrecto dentro del ZIP: $insideHash" }
-        Write-Host "Validacion correcta: $($zip.Entries.Count) entradas y SHA256 esperado de V26.1.5." -ForegroundColor Green
+        Write-Host "Validacion correcta: $($zip.Entries.Count) entradas y SHA256 esperado de V26.1.7." -ForegroundColor Green
     } finally { $zip.Dispose() }
 
     if (-not ([System.IO.File]::ReadAllText((Join-Path $srcShader 'shaders.properties')).Contains('customTexture.avStarCatalog=/img/auroraviva_star_catalog_v26.png'))) {

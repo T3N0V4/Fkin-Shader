@@ -54,22 +54,29 @@ vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGl
     return vec4(Scattering, Transmittance);
 }
 
-vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither) {
-    const float PLANE_TOP = 1500.0;
-    const float PLANE_BOTTOM = 1000.0;
+vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither, float maxDistance) {
+    // Aurora Viva V26.1.6: fixed WORLD Y, not a plane attached to the camera.
+    const float PLANE_BOTTOM = AV_CLOUD_BASE_HEIGHT;
+    const float PLANE_TOP = AV_CLOUD_BASE_HEIGHT + AV_CLOUD_LAYER_THICKNESS;
 
     const float CLOUD_EXTINCTION = 0.5;
     const float CLOUD_SCATTERING = CLOUD_EXTINCTION;
 
     const int SAMPLE_COUNT = 12;
-    int SampleCount = int(((1 - PlayerPosN.y) * 0.75 + 0.25) * SAMPLE_COUNT + 1);
+    int SampleCount = clamp(int(((1 - PlayerPosN.y) * 0.75 + 0.25) * SAMPLE_COUNT + 1), 2, SAMPLE_COUNT);
 
-    vec3 StartPos = PLANE_BOTTOM / PlayerPosN.y * PlayerPosN; 
-    vec3 EndPos = PLANE_TOP / PlayerPosN.y * PlayerPosN;
+    // Solve both intersections in camera-relative ray space. The volume is
+    // anchored to absolute world Y; rays going away from the layer do no work.
+    if (abs(PlayerPosN.y) < 0.0001) return vec4(0.0, 0.0, 0.0, 1.0);
+    float RayBottom = (PLANE_BOTTOM - cameraPosition.y) / PlayerPosN.y;
+    float RayTop = (PLANE_TOP - cameraPosition.y) / PlayerPosN.y;
+    float RayEnter = max(0.0, min(RayBottom, RayTop));
+    float RayExit = min(max(RayBottom, RayTop), maxDistance);
+    if (RayExit <= RayEnter + 0.001) return vec4(0.0, 0.0, 0.0, 1.0);
 
-    vec3 Step = (EndPos - StartPos) / SampleCount;
+    vec3 Step = PlayerPosN * ((RayExit - RayEnter) / float(SampleCount));
     float StepSize = length(Step);
-    vec3 Pos = Step * Dither + StartPos + vec3(cameraPosition.x, 0, cameraPosition.z);
+    vec3 Pos = cameraPosition + PlayerPosN * RayEnter + Step * Dither;
 
     vec3 Wind = frameTimeCounter * vec3(12, 0, 16) * CLOUD_SPEED;
     float CloudAmount = (CLOUD_AMOUNT - 12) / 10.0 + (rainStrength + thunderStrength * 0.5);
@@ -83,7 +90,8 @@ vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float 
 
         float Alt = rescale(PLANE_BOTTOM, PLANE_TOP, Pos.y);
         float HeightDensity = linstep(0.0, 0.75, 1 - Alt) * linstep(0.0, 0.2, Alt);
-        Base = pow(Base, 13 - CloudAmount * 5 + (1-HeightDensity) * 5);
+        float CoverageThreshold = clamp(0.42 - 0.08 * CloudAmount, 0.18, 0.64);
+        Base = smoothstep(CoverageThreshold, 0.90, Base) * HeightDensity * HeightDensity;
 
         if(Base < 1e-4) {
             Pos += Step;
@@ -97,7 +105,7 @@ vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float 
         float fms = CLOUD_SCATTERING * (1 - exp(-2.5 * Base * CLOUD_EXTINCTION)) / CLOUD_EXTINCTION;
         float MS = ISOTROPIC_PHASE * fms / (1 - fms);
 
-        vec3 Scattering = (SKY_GROUND * 2.16 + SunGlare * 1.07) * ISOTROPIC_PHASE;
+        vec3 Scattering = (mix(SKY_TOP, SKY_GROUND, 0.65) * 2.16 + SunGlare * 1.07) * ISOTROPIC_PHASE;
 
         float LightFactor = linstep(PLANE_BOTTOM, PLANE_TOP, Pos.y) * 0.7 + 0.3;
         Scattering += SUN_DIRECT * (Phase + MS) * 1.58 * LightFactor;
@@ -113,9 +121,17 @@ vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float 
         Pos += Step;
     }
 
-    vec4 FinalColor = vec4(TotalScattering, TotalTransmittance);
-
+    // At grazing angles the layer spans many kilometres. Fade the far portion
+    // into exactly the same air color as the rest of the sky, no horizon band.
+    float distanceFade = 1.0 - smoothstep(1200.0, 3400.0, RayEnter);
+    vec4 FinalColor = vec4(TotalScattering * distanceFade,
+                           mix(1.0, TotalTransmittance, distanceFade));
     return FinalColor;
+}
+
+// Calls from water reflections and sky retain unbounded scene depth.
+vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither) {
+    return get_clouds_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, 1000000.0);
 }
 
 #ifdef DEFERRED

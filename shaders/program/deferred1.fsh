@@ -870,18 +870,7 @@ vec3 get_sun_glare(float Dist) {
     return SunGlare * pow2(Dist * 0.5 + 0.5) * Visibility;
 }
 #include "/lib/auroraviva/celestial/atmosphere.glsl"
-float get_stars(vec3 PlayerPos) {
-    vec3 StarCoord = PlayerPos / (PlayerPos.y + length(PlayerPos.xz));
-    StarCoord.x += frameTimeCounter * 0.001;
-    const float ACTUAL_STAR_SIZE = STAR_SIZE * 512;
-    StarCoord = floor(StarCoord * ACTUAL_STAR_SIZE) / ACTUAL_STAR_SIZE;
-
-    float Visibility = smoothstep(0.0, 0.1, StarCoord.y); // Smoothly fade out stars near the bottom of the sky
-    #ifdef DIMENSION_OVERWORLD
-    Visibility *= nightStrength;
-    #endif
-    return max(0, random(StarCoord.xz) - 0.996) * 50 * Visibility * STAR_STRENGTH;
-}
+#include "/lib/auroraviva/celestial/stars.glsl"
 vec3 get_aurora(vec3 PlayerPosN, float Dither) {
     float AuroraStrength = AURORA_STRENGTH * nightStrength;
     #ifndef AURORA_EVERYWHERE

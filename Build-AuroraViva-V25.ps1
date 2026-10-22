@@ -1,4 +1,4 @@
-# Aurora Viva V25 - Fase 2.2: Iris build from modular source.
+# Aurora Viva V25 - Fase 2.3: Iris build from modular source.
 # The generated ZIP always gets a NEW name (_r001, _r002, ...).
 # No code changes to the compiled deferred1.fsh: strict V24.1 SHA256 guard.
 param(
@@ -19,7 +19,7 @@ if ($InstallToModrinth -and -not (Test-Path -LiteralPath $profileShaderpacks -Pa
 # Allocate a unique ZIP filename WITHOUT ever overwriting earlier versions.
 $outputZip = $null
 for ($n = 1; $n -le 999; $n++) {
-    $fileName = ('AuroraViva_V25_2_Atmosfera_r{0:D3}.zip' -f $n)
+    $fileName = ('AuroraViva_V25_3_Estrellas_r{0:D3}.zip' -f $n)
     $candidate = Join-Path $root $fileName
     $installed = Join-Path $profileShaderpacks $fileName
     if (-not (Test-Path -LiteralPath $candidate) -and -not (Test-Path -LiteralPath $installed)) {
@@ -42,7 +42,7 @@ try {
     $content = [System.IO.File]::ReadAllText($srcProgram, $utf8).Replace("`r`n", "`n")
 
     # Expand in SOURCE ORDER: the atmosphere include occurs before the other 4 modules.
-    foreach ($mod in @('atmosphere', 'core', 'planets', 'blackhole', 'renderer')) {
+    foreach ($mod in @('atmosphere', 'stars', 'core', 'planets', 'blackhole', 'renderer')) {
         $relative = "/lib/auroraviva/celestial/$mod.glsl"
         $marker = '#include "' + $relative + '"' + "`n"
         $path = Join-Path $srcShader ("lib\auroraviva\celestial\$mod.glsl")
@@ -92,6 +92,7 @@ try {
             'shaders/shaders.properties',
             'shaders/program/deferred1.fsh',
             'shaders/lib/auroraviva/celestial/atmosphere.glsl',
+            'shaders/lib/auroraviva/celestial/stars.glsl',
             'shaders/global/atmosphere/sky.glsl'
         )) {
             if (-not $names.Contains($needed)) { throw "Falta dentro del ZIP: $needed" }

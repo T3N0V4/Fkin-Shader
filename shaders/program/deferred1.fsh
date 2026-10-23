@@ -1,4 +1,16 @@
 #define DEFERRED
+// V26.1.8: diagnostic classification of vanilla/DH depth and their boundaries.
+#define AV_HORIZON_DEBUG_MODE 0 // [0 1 2 3]
+#define AV_DH_TRUE_SKY_BLEND 1 // [0 1]
+// V26.1.10: common distance/height scattering for sky and scene.
+// Set to 0 to compare exactly against the legacy V26.1.9 fog pipeline.
+#define AV_ATMOS_PIPELINE 1 // [0 1]
+#define AV_ATMOS_MAX_PATH 256.0 // [128.0 192.0 256.0 320.0 384.0 512.0]
+// V26.1.11: inexpensive clear-weather air visibility, shared by vanilla and DH geometry.
+// 0 restores V26.1.10 unchanged (including its expensive full-sky DH seam).
+#define AV_AIR_VISIBILITY 1 // [0 1]
+#define AV_AIR_HAZE_START 96.0 // [48.0 64.0 96.0 128.0 160.0 192.0]
+#define AV_AIR_HAZE_END 0.92 // [0.75 0.80 0.85 0.88 0.90 0.92 0.95 0.98]
 // Aurora Viva V7 Fix2 - shader de cielo activo: opciones reales del agujero negro
 #define AV_BLACK_HOLE
 #define AV_BLACK_HOLE_SIZE 0.092 // [0.04 0.05 0.06 0.07 0.08 0.092 0.10 0.11 0.12]
@@ -161,8 +173,10 @@
 #define CLOUD_SPEED 2 // [0 1 2 3 4 5 6]
 #define CLOUD_QUALITY 5 // [2 3 4 5 6 7 9]
 #define CLOUD_STYLE 2 // [0 1 2 3]
-#define AV_CLOUD_BASE_HEIGHT 360.0 // [240.0 280.0 320.0 360.0 420.0 480.0 560.0 640.0 800.0 1000.0]
-#define AV_CLOUD_LAYER_THICKNESS 200.0 // [100.0 160.0 200.0 240.0 320.0 400.0 500.0]
+#define AV_CLOUD_BASE_HEIGHT 220.0 // [160.0 180.0 200.0 220.0 240.0 280.0 320.0 360.0 420.0 480.0 560.0]
+#define AV_CLOUD_LAYER_THICKNESS 160.0 // [80.0 120.0 160.0 200.0 240.0 320.0 400.0]
+#define AV_WISPY_CLOUD_BASE_HEIGHT 420.0 // [300.0 340.0 380.0 400.0 420.0 460.0 500.0 560.0 640.0]
+#define AV_WISPY_CLOUD_THICKNESS 40.0 // [20.0 30.0 40.0 60.0 80.0 120.0]
 #define AURORA_BOREALIS
 #define AURORA_STRENGTH 0.24 // [0.1 0.11 0.12 0.13 0.14 0.15 0.16 0.17 0.18 0.19 0.2 0.21 0.22 0.23 0.24 0.25 0.26 0.27 0.28 0.29 0.3 0.31 0.32 0.33 0.34 0.35 0.36 0.37 0.38 0.39 0.4 0.41 0.42 0.43 0.44 0.45 0.46 0.47 0.48 0.49 0.5]
 #define AURORA_HEIGHT 3.0 // [1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0]
@@ -638,10 +652,15 @@ float dither(vec2 Pos) {
     return ign(Pos, false);
 }
 float ld_exact(float depth, bool IsDH) {
-    if (!IsDH)
-        return (near * far) / (depth * (near - far) + far);
-    else
-        return (near * dhRenderDistance) / (depth * (near - dhRenderDistance) + dhRenderDistance);
+    #ifdef DISTANT_HORIZONS
+        if (IsDH) {
+            // DH render distance is NOT the projection far plane.
+            // Unproject a point on the camera's center ray using the real DH matrix.
+            vec4 eye = dhProjectionInverse * vec4(0.0, 0.0, depth * 2.0 - 1.0, 1.0);
+            return abs(eye.z / max(abs(eye.w), 1e-6));
+        }
+    #endif
+    return (near * far) / (depth * (near - far) + far);
 }
 float get_depth_solid(vec2 ScreenPos, out bool IsDH) {
     float Depth = texture(depthtex1, ScreenPos).x;
@@ -1032,22 +1051,52 @@ vec4 get_clouds_flat(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGla
     float Transmittance = exp(-Noise * DENSITY);
     return vec4(CloudColor * Noise * DENSITY, Transmittance);
 }
-vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGlare) {
-    vec2 Wind = vec2(0.1, 0.05) * frameTimeCounter;
-    float Displacement = texture(noisetex, (PlayerPos.xz / PlayerPos.y + Wind) * 0.01).r;
-    float D = Displacement * noiseTextureResolution * 0.01;
-    float Noise = texture(noisetex, (PlayerPos.xz / PlayerPos.y + D) / noiseTextureResolution * 10).b;
-    Noise = pow(Noise, 6);
-    Noise -= texture(noisetex, (PlayerPos.xz / PlayerPos.y - D * 0.5) / noiseTextureResolution * 80).g * 0.05;
-    Noise = max(0, Noise);
+// V26.1.12: wisps occupy a real world-space layer, never an angular sky texture.
+// This lets the camera fly through the clouds instead of dragging them upward.
+vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN,
+                      vec3 SunGlare, float maxDistance) {
+    const float bottomY = AV_WISPY_CLOUD_BASE_HEIGHT;
+    const float topY = bottomY + AV_WISPY_CLOUD_THICKNESS;
+    if (abs(PlayerPosN.y) < 0.0001 || maxDistance <= 0.0)
+        return vec4(0.0, 0.0, 0.0, 1.0);
 
-    float Transmittance = exp(-Noise * 5 * 0.5);
-    float VdotL = dot(ViewPosN, slpN);
-    float MiePhase = max(xlf_phase(VdotL, 0.7), 1 / PI);
-    vec3 Scattering = MiePhase * SUN_DIRECT + SKY_GROUND * 4 * ISOTROPIC_PHASE + SunGlare;
-    Scattering *= (1 - Transmittance) / 0.5;
+    float t0 = (bottomY - cameraPosition.y) / PlayerPosN.y;
+    float t1 = (topY - cameraPosition.y) / PlayerPosN.y;
+    float entry = max(0.0, min(t0, t1));
+    float leave = min(max(t0, t1), maxDistance);
+    if (leave <= entry + 0.001) return vec4(0.0, 0.0, 0.0, 1.0);
 
-    return vec4(Scattering, Transmittance);
+    // Thin, lightweight volume: three samples, fixed world-space density.
+    const int wispySteps = 3;
+    float stepLength = (leave - entry) / float(wispySteps);
+    vec3 pos = cameraPosition + PlayerPosN * (entry + stepLength * 0.5);
+    vec2 wind = frameTimeCounter * vec2(12.0, 6.0) * CLOUD_SPEED;
+    float transmittance = 1.0;
+    vec3 scattering = vec3(0.0);
+    float phase = max(xlf_phase(dot(ViewPosN, slpN), 0.7), 1.0 / PI);
+    vec3 lightColor = (SKY_GROUND * 3.5 + SunGlare) * ISOTROPIC_PHASE
+                       + SUN_DIRECT * phase;
+    for (int i = 0; i < wispySteps; ++i) {
+        vec2 uv = (pos.xz - wind) * 0.00013;
+        float shape = texture(noisetex, uv).r;
+        float detail = texture(noisetex, uv * 3.2 + vec2(0.23, 0.47)).b;
+        float vertical = smoothstep(bottomY, bottomY + 9.0, pos.y)
+                       * (1.0 - smoothstep(topY - 9.0, topY, pos.y));
+        float density = smoothstep(0.45, 0.78, shape)
+                      * (0.65 + 0.35 * detail) * vertical;
+        float attenuation = exp(-density * stepLength * 0.035);
+        scattering += lightColor * (1.0 - attenuation) * transmittance;
+        transmittance *= attenuation;
+        pos += PlayerPosN * stepLength;
+    }
+    // Near the geometric horizon, transition gently into the background air.
+    float fade = 1.0 - smoothstep(1800.0, 4400.0, entry);
+    return vec4(scattering * fade, mix(1.0, transmittance, fade));
+}
+
+vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN,
+                      vec3 SunGlare) {
+    return get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare, 1000000.0);
 }
 vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither, float maxDistance) {
     // Aurora Viva V26.1.6: fixed WORLD Y, not a plane attached to the camera.
@@ -1216,31 +1265,49 @@ vec4 get_clouds_blocky_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare,
     return FinalColor;
 }
 vec3 get_clouds(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGlare, vec3 SkyColor, float Dither) {
-    vec4 CloudColor; vec3 OgColor = SkyColor;
-
-    #if (defined DOUBLE_CLOUD_LAYERS) && (CLOUD_STYLE != 0)
-        #if CLOUD_STYLE == 1 || CLOUD_STYLE == 2
-            CloudColor = get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
-        #elif CLOUD_STYLE == 3
-            CloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, true);
-        #endif
-        SkyColor = blend_vl(SkyColor, CloudColor);
-    #endif
-    
-    #if CLOUD_STYLE == 0
-        return SkyColor;
-    #elif CLOUD_STYLE == 1
-        CloudColor = get_clouds_flat(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
-    #elif CLOUD_STYLE == 2
-        CloudColor = get_clouds_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither);
-    #elif CLOUD_STYLE == 3
-        CloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, false);
-    #endif
-    SkyColor = blend_vl(SkyColor, CloudColor);
-
-    SkyColor = mix(OgColor, SkyColor, linstep(0, 0.2, PlayerPosN.y) * (CLOUD_OPACITY + 0.5));
-
+    vec3 originalSky = SkyColor;
+#if CLOUD_STYLE == 0
     return SkyColor;
+#elif CLOUD_STYLE == 2
+    vec4 mainCloud = get_clouds_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither);
+#ifdef DOUBLE_CLOUD_LAYERS
+    vec4 highCloud = get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
+    // Order is based on world altitude, not a permanent foreground overlay.
+    if (cameraPosition.y > AV_WISPY_CLOUD_BASE_HEIGHT && PlayerPosN.y < 0.0) {
+        SkyColor = blend_vl(SkyColor, mainCloud);
+        SkyColor = blend_vl(SkyColor, highCloud);
+    } else {
+        SkyColor = blend_vl(SkyColor, highCloud);
+        SkyColor = blend_vl(SkyColor, mainCloud);
+    }
+#else
+    SkyColor = blend_vl(SkyColor, mainCloud);
+#endif
+#else
+    vec4 cloudColor;
+#ifdef DOUBLE_CLOUD_LAYERS
+#if CLOUD_STYLE == 1
+    cloudColor = get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
+    SkyColor = blend_vl(SkyColor, cloudColor);
+#elif CLOUD_STYLE == 3
+    cloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, true);
+    SkyColor = blend_vl(SkyColor, cloudColor);
+#endif
+#endif
+#if CLOUD_STYLE == 1
+    cloudColor = get_clouds_flat(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
+#elif CLOUD_STYLE == 3
+    cloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, false);
+#endif
+    SkyColor = blend_vl(SkyColor, cloudColor);
+#endif
+    // When the camera is above the real volume, looking downward must NOT
+    // hide clouds. Original code zeroed the weight for every negative ray.
+    float viewFactor = PlayerPosN.y >= 0.0
+        ? linstep(0.0, 0.2, PlayerPosN.y)
+        : (cameraPosition.y > AV_CLOUD_BASE_HEIGHT
+            ? linstep(0.0, 0.2, -PlayerPosN.y) : 0.0);
+    return mix(originalSky, SkyColor, clamp(viewFactor * (CLOUD_OPACITY + 0.5), 0.0, 1.0));
 }
 #if (defined PBR_POM) && (defined PBR_NORMAL)
 #endif
@@ -1276,16 +1343,8 @@ vec3 get_border_fog(float Dist, vec3 Color, vec3 SkyColor, bool IsDH) {
 
     Strength = min(1, (1-smoothstep(FogEnd - 32, FogEnd - 16, Dist)) * exp(-3 * BORDER_FOG_STRENGTH * Strength));
 
-    // Smooth distant LOD silhouettes into the same computed sky. This is
-    // confined to DH depth pixels, so nearby terrain and water remain sharp.
-    #ifdef DISTANT_HORIZONS
-        if (IsDH) {
-            float DHEnd = float(dhRenderDistance);
-            float DHFade = smoothstep(DHEnd * AV_DH_HORIZON_FADE_START,
-                                      DHEnd * 0.995, Dist);
-            Strength *= (1.0 - DHFade);
-        }
-    #endif
+    // V26.1.9: DH full-sky transition is applied AFTER the fog and foreground
+    // passes in main(). No approximate fog-only LOD blend here.
     return mix(SkyColor, Color, Strength);
 }
 vec3 get_blindness_fog(float Dist, vec3 Color) {
@@ -1346,22 +1405,55 @@ float trace_godrays(vec3 ScreenPos, float VdotL, vec3 LightPos, float Dither, fl
 
     return Shadowing * (Phase + MS);
 }
+// V26.1.10: atmosphere is a single optical sample shared by terrain, DH, and sky.
+// This is deliberately separate from the black-hole/planet ray tracers.
+struct AVAtmosphereSample {
+    float density;
+    float transmittance;
+};
+AVAtmosphereSample av_atmosphere_sample(vec3 PlayerPos, float Dist) {
+    AVAtmosphereSample atmosphere;
+    // Smooth representative height along the camera ray. The previous shader
+    // changed formulas abruptly when depth switched from geometry to sky.
+    float path = min(max(Dist, 0.0), AV_ATMOS_MAX_PATH);
+    float eyeHeight = cameraPosition.y;
+    float viewHeight = eyeHeight + (PlayerPos.y / max(Dist, 1e-3)) * path * 0.5;
+    float heightFactor = isEyeInWater == 1 ? 1.0 : 1.0 - linstep(60.0, 100.0, viewHeight);
+    atmosphere.density = 0.12 + heightFactor * 0.15;
+    #if MC_VERSION >= 11700
+        float FogBoost = step(isEyeInWater, 0) *
+            (max(0.0, furthest - fogEnd) / max(furthest, 1.0)) * 20.0;
+    #else
+        float FogBoost = 0.0;
+    #endif
+    atmosphere.density *= fogAmount + FogBoost;
+    atmosphere.density *= isEyeInWater == 1 ? UNDERWATER_FOG_STRENGTH * 0.25 : ATM_FOG_STRENGTH;
+    atmosphere.transmittance = exp(-FOG_EXTINCTION * path * atmosphere.density);
+    return atmosphere;
+}
 vec3 get_atm_fog(vec3 Color, vec3 ScreenPos, vec3 PlayerPos, float Dist, float VdotL, float Dither, float Depth, bool IsDH) {
     if(fogAmount < 1e-5) return Color;
     vec3 Scattering = vec3(0);
-
-    // Make sure it doesn't extend forever (it would look ugly);
-    float Height = Depth >= 1 ? (PlayerPos.y / Dist + 1.7) * 50 : PlayerPos.y * min(furthest, Dist) / Dist + cameraPosition.y;
-    float HeightFalloff = isEyeInWater == 1 ? 1 : 1 - linstep(60, 100, Height);
-    float Density = 0.12 + HeightFalloff * 0.15;
-
-    #if MC_VERSION >= 11700
-        float FogBoost = step(isEyeInWater, 0) * (max(0, furthest - fogEnd) / furthest) * 20;
+    float Density;
+    float Transmittance;
+    #if AV_ATMOS_PIPELINE == 1
+        AVAtmosphereSample avAtmosphere = av_atmosphere_sample(PlayerPos, Dist);
+        Density = avAtmosphere.density;
+        Transmittance = avAtmosphere.transmittance;
     #else
-        float FogBoost = 0;
+        // Identical height and 128-block cap used by V26.1.9.
+        float Height = Depth >= 1 ? (PlayerPos.y / Dist + 1.7) * 50 : PlayerPos.y * min(furthest, Dist) / Dist + cameraPosition.y;
+        float HeightFalloff = isEyeInWater == 1 ? 1 : 1 - linstep(60, 100, Height);
+        Density = 0.12 + HeightFalloff * 0.15;
+        #if MC_VERSION >= 11700
+            float FogBoost = step(isEyeInWater, 0) * (max(0, furthest - fogEnd) / furthest) * 20;
+        #else
+            float FogBoost = 0;
+        #endif
+        Density *= fogAmount + FogBoost;
+        Density *= isEyeInWater == 1 ? UNDERWATER_FOG_STRENGTH * 0.25 : ATM_FOG_STRENGTH;
+        Transmittance = exp(-FOG_EXTINCTION * min(Dist, 128) * Density);
     #endif
-    Density *= fogAmount + FogBoost;
-    Density *= isEyeInWater == 1 ? UNDERWATER_FOG_STRENGTH * 0.25 : ATM_FOG_STRENGTH;
 
     #ifdef DIMENSION_OVERWORLD
         // Sun
@@ -1381,9 +1473,7 @@ vec3 get_atm_fog(vec3 Color, vec3 ScreenPos, vec3 PlayerPos, float Dist, float V
     // Ambient
     Scattering += tint_underwater(SKY_GROUND / PI);
 
-    float Transmittance = exp(-FOG_EXTINCTION * min(Dist, 128) * Density);
-
-    // TODO: Make border fog work properly with this
+    // Apply the same integrated extinction to sky and surfaces.
     Color *= Transmittance;
 
     return Color + Scattering * (1 - Transmittance) * FOG_SCATTERING / FOG_EXTINCTION;
@@ -1391,16 +1481,29 @@ vec3 get_atm_fog(vec3 Color, vec3 ScreenPos, vec3 PlayerPos, float Dist, float V
 vec3 get_fog_main(vec3 ScreenPos, vec3 PlayerPos, vec3 Color, float Depth, vec3 SkyColor, float VdotL, float Dither, bool IsDH) {
     float Dist = length(PlayerPos);
 
-    if (Depth < 1) {
-        #if defined BORDER_FOG && !defined CUSTOM_SKYBOXES
-            Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor, IsDH);
-        #endif
-    }
+    #if AV_ATMOS_PIPELINE == 0
+        // Legacy order for A/B comparison in Iris.
+        if (Depth < 1) {
+            #if defined BORDER_FOG && !defined CUSTOM_SKYBOXES
+                Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor, IsDH);
+            #endif
+        }
+    #endif
 
     #if !(defined DIMENSION_OVERWORLD && defined ATMOSPHERIC_FOG)
         if(isEyeInWater == 1)
     #endif
         Color.rgb = get_atm_fog(Color.rgb, ScreenPos, PlayerPos, Dist, VdotL, Dither, Depth, IsDH);
+
+    #if AV_ATMOS_PIPELINE == 1
+        // One atmosphere. DH far coverage blends with the full sky below;
+        // applying the old independent border fog here caused double fading.
+        if (Depth < 1.0 && !IsDH) {
+            #if defined BORDER_FOG && !defined CUSTOM_SKYBOXES
+                Color.rgb = get_border_fog(Dist, Color.rgb, SkyColor, false);
+            #endif
+        }
+    #endif
     
     #ifdef DIMENSION_END
         #ifdef END_FOG
@@ -1489,32 +1592,41 @@ vec3 get_outline(vec3 Color, vec3 ScreenPos, ivec2 FragCoord) {
 
 
 
-/* DRAWBUFFERS:0 */
-layout(location = 0) out vec4 Color;
-void main() {
-    Color = texture(colortex0, texcoord);
-    bool IsDH;
-    float Depth = get_depth(texcoord, IsDH);
-    vec3 ScreenPos = vec3(texcoord, Depth);
-    vec3 ViewPos = screen_view(ScreenPos, IsDH);
+// V26.1.8 — SOURCE MASK. This intentionally bypasses every sky/fog effect
+// in Mode 1 so that colors identify raw pixel provenance, not its appearance.
+#if AV_HORIZON_DEBUG_MODE > 0
+int av_horizon_source(vec2 uv) {
+    float vanillaDepth = texture(depthtex0, uv).r;
+    #ifdef MC_GL_RENDERER_RADEON
+        if (vanillaDepth <= 0.0) vanillaDepth = 1.0;
+    #endif
+    if (vanillaDepth < 0.56) return 3; // first-person hand / excluded depth
+    if (vanillaDepth < 1.0) return 1;  // regular Minecraft terrain / water
+    #ifdef DISTANT_HORIZONS
+        float dhDepth = texture(dhDepthTex0, uv).r;
+        #ifdef MC_GL_RENDERER_RADEON
+            if (dhDepth <= 0.0) dhDepth = 1.0;
+        #endif
+        if (dhDepth < 1.0) return 2;   // DH / LOD pixels
+    #endif
+    return 0;                         // sky / no scene geometry
+}
+vec3 av_horizon_source_color(int sourceID) {
+    if (sourceID == 1) return vec3(0.10, 1.00, 0.10); // green: vanilla
+    if (sourceID == 2) return vec3(1.00, 0.08, 0.85); // magenta: DH
+    if (sourceID == 3) return vec3(1.00, 0.90, 0.04); // yellow: hand
+    return vec3(0.08, 0.32, 1.00);                    // blue: sky
+}
+#endif
 
-    vec3 PlayerPos = mat3(gbufferModelViewInverse) * ViewPos;
+// V26.1.9: the SAME sky path for ordinary sky pixels and faded distant
+// LOD pixels. Prevents compositing DH into an incomplete background color.
+vec3 av_dh_full_sky(vec3 inputColor, inout vec3 SkyColor,
+                    vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN,
+                    vec3 SunGlare, float VdotL, float Dither,
+                    inout AVCelestialContext skyContext) {
+    vec4 Color = vec4(inputColor, 1.0);
 
-    vec3 ViewPosN = normalize(ViewPos);
-    vec3 PlayerPosN = normalize(PlayerPos);
-
-    // Cheap context is enough for sky colors used in terrain fog.
-    AVCelestialContext skyContext = av_celestial_context_base();
-
-    float VdotL = dot(ViewPosN, sunPosN);
-    vec3 SunGlare = get_sun_glare(VdotL);
-
-    vec3 SkyColor = get_sky_main(ViewPosN, PlayerPosN, SunGlare, skyContext);
-    SkyColor += (ign(gl_FragCoord.xy, false) - 0.5) / 255;
-
-    float Dither = dither(gl_FragCoord.xy);
-
-    if (Depth >= 1) {
         #ifndef CUSTOM_SKYBOXES
             #ifndef DIMENSION_OVERWORLD
             Color = vec4(0, 0, 0, 1);
@@ -1550,16 +1662,92 @@ void main() {
                         Color.rgb = av_mystical_celestials(Color.rgb, PlayerPosN, skyContext);
                         Color.rgb = av_night_black_hole(Color.rgb, PlayerPosN);
                     #endif
-                    Color.rgb = get_clouds(ViewPosN, PlayerPos, PlayerPosN, SunGlare, Color.rgb, Dither);
-
                     #ifdef AURORA_BOREALIS
                         Color.rgb += get_aurora(PlayerPosN, Dither);
                     #endif
                 #endif
             }
+            // Clouds are fixed world-space volumes, including below the camera.
+            // Only astronomical sources remain in the upward-facing sky branch.
+            #ifdef DIMENSION_OVERWORLD
+                #if CLOUD_STYLE == 2
+                    Color.rgb = get_clouds(ViewPosN, PlayerPos, PlayerPosN, SunGlare, Color.rgb, Dither);
+                #elif CLOUD_STYLE != 0
+                    if (PlayerPos.y > 0.0)
+                        Color.rgb = get_clouds(ViewPosN, PlayerPos, PlayerPosN, SunGlare, Color.rgb, Dither);
+                #endif
+            #endif
         #endif
+    return Color.rgb;
+}
+
+// V26.1.11: visibility of distant terrain through clear air.
+// It is computed once per *visible geometry* fragment and reused for vanilla
+// and DH surfaces. The atmosphere background is the SkyColor already calculated
+// by get_sky_main(): never raymarch the whole sky again over every LOD pixel.
+float av_air_visibility_factor(float distanceToSurface) {
+    float startDistance = AV_AIR_HAZE_START;
+    float endDistance = max(startDistance + 96.0, float(furthest) * AV_AIR_HAZE_END);
+    float u = clamp((distanceToSurface - startDistance) /
+                    (endDistance - startDistance), 0.0, 1.0);
+    float fade = u * u * (3.0 - 2.0 * u);
+    // A squared fade preserves contrast close to the viewer, while the
+    // distant DH silhouette reaches zero visibility *before* the hard edge.
+    return 1.0 - fade * fade;
+}
+
+/* DRAWBUFFERS:0 */
+layout(location = 0) out vec4 Color;
+void main() {
+    Color = texture(colortex0, texcoord);
+    bool IsDH;
+    float Depth = get_depth(texcoord, IsDH);
+    #if AV_HORIZON_DEBUG_MODE == 3
+        #ifdef DISTANT_HORIZONS
+            if (IsDH && Depth < 1.0) {
+                vec3 dhDebugPos = mat3(gbufferModelViewInverse) * screen_view(vec3(texcoord, Depth), true);
+                float dhDebugFade = smoothstep(float(dhRenderDistance) * AV_DH_HORIZON_FADE_START,
+                                                float(dhRenderDistance) * 0.995,
+                                                length(dhDebugPos));
+                Color.rgb = mix(vec3(1.0, 0.05, 0.05), vec3(0.05, 1.0, 0.05), dhDebugFade);
+            } else {
+                Color.rgb = Depth >= 1.0 ? vec3(0.05, 0.30, 1.0) : vec3(0.25);
+            }
+        #else
+            Color.rgb = Depth >= 1.0 ? vec3(0.05, 0.30, 1.0) : vec3(0.25);
+        #endif
+        return;
+    #endif
+    #if AV_HORIZON_DEBUG_MODE == 1
+        // Precise scene-layer mask. No expensive celestial passes in this mode.
+        Color = vec4(av_horizon_source_color(av_horizon_source(texcoord)), 1.0);
+        return;
+    #endif
+    vec3 ScreenPos = vec3(texcoord, Depth);
+    vec3 ViewPos = screen_view(ScreenPos, IsDH);
+
+    vec3 PlayerPos = mat3(gbufferModelViewInverse) * ViewPos;
+
+    vec3 ViewPosN = normalize(ViewPos);
+    vec3 PlayerPosN = normalize(PlayerPos);
+
+    // Cheap context is enough for sky colors used in terrain fog.
+    AVCelestialContext skyContext = av_celestial_context_base();
+
+    float VdotL = dot(ViewPosN, sunPosN);
+    vec3 SunGlare = get_sun_glare(VdotL);
+
+    vec3 SkyColor = get_sky_main(ViewPosN, PlayerPosN, SunGlare, skyContext);
+    SkyColor += (ign(gl_FragCoord.xy, false) - 0.5) / 255;
+
+    float Dither = dither(gl_FragCoord.xy);
+
+    if (Depth >= 1) {
+        Color.rgb = av_dh_full_sky(Color.rgb, SkyColor, ViewPosN, PlayerPos,
+                                   PlayerPosN, SunGlare, VdotL, Dither,
+                                   skyContext);
     }
-    
+
     else if (Depth >= 0.56) { // Skip hand & sky
         #ifdef SSAO
             Color.rgb = ssao(Color.rgb, ViewPos, Dither, IsDH);
@@ -1579,7 +1767,19 @@ void main() {
             float cloudDepth = max(0.0, length(PlayerPos) - 0.5);
             vec4 avForegroundCloud = get_clouds_volumetric(
                 ViewPosN, PlayerPosN, SunGlare, Dither, cloudDepth);
-            Color.rgb = blend_vl(Color.rgb, avForegroundCloud);
+            #ifdef DOUBLE_CLOUD_LAYERS
+                vec4 avForegroundWispy = get_clouds_wispy(
+                    ViewPosN, PlayerPos, PlayerPosN, SunGlare, cloudDepth);
+                if (cameraPosition.y > AV_WISPY_CLOUD_BASE_HEIGHT && PlayerPosN.y < 0.0) {
+                    Color.rgb = blend_vl(Color.rgb, avForegroundCloud);
+                    Color.rgb = blend_vl(Color.rgb, avForegroundWispy);
+                } else {
+                    Color.rgb = blend_vl(Color.rgb, avForegroundWispy);
+                    Color.rgb = blend_vl(Color.rgb, avForegroundCloud);
+                }
+            #else
+                Color.rgb = blend_vl(Color.rgb, avForegroundCloud);
+            #endif
         }
     #endif
 
@@ -1590,10 +1790,74 @@ void main() {
         #endif
     }
 
+    // V26.1.11: keep clear-weather air even when fogAmount == 0.
+    // One shared visibility law for all ordinary/DH geometry. At the distance
+    // cutoff both vanish into the same base air colour as the true sky.
+    #if AV_AIR_VISIBILITY == 1 && defined(DIMENSION_OVERWORLD) && defined(DISTANT_HORIZONS)
+        if (Depth >= 0.56 && Depth < 1.0 && isEyeInWater == 0) {
+            float airVisibility = av_air_visibility_factor(length(PlayerPos));
+            Color.rgb = mix(SkyColor, Color.rgb, airVisibility);
+        }
+    #endif
+
+    // V26.1.9: far DH pixels fade to THE SAME complete sky rendering that
+    // is used for genuinely empty pixels (stars, planets, cloud atmosphere).
+    // Uses camera-distance instead of a rectangular screen mask; avoids
+    // drawing a hard square boundary as LOD coverage ends.
+    #if defined(DISTANT_HORIZONS) && defined(DIMENSION_OVERWORLD) && AV_DH_TRUE_SKY_BLEND == 1 && AV_AIR_VISIBILITY == 0
+        if (IsDH && Depth >= 0.56 && Depth < 1.0) {
+            float lodDistance = length(PlayerPos);
+            float dhFade = smoothstep(float(dhRenderDistance) * AV_DH_HORIZON_FADE_START,
+                                      float(dhRenderDistance) * 0.995,
+                                      lodDistance);
+            if (dhFade > 0.003) {
+                // A sky ray, not an LOD-surface position: avoid inheriting
+                // foreground terrain depth in sky/cloud scattering.
+                vec3 skyViewPos = screen_view(vec3(texcoord, 1.0), true);
+                vec3 skyPlayerPos = mat3(gbufferModelViewInverse) * skyViewPos;
+                vec3 skyViewRay = normalize(skyViewPos);
+                vec3 skyPlayerRay = normalize(skyPlayerPos);
+                // Projection ray is the same for the DH surface and distant sky.
+                // Reuse the atmospheric colour/context already computed above.
+                float skyVdotL = VdotL;
+                vec3 skyGlare = SunGlare;
+                AVCelestialContext distantCtx = skyContext;
+                vec3 distantSkyBase = SkyColor;
+
+                // The unoccupied colortex0 background is black. Never seed
+                // this background with the DH block's material color.
+                vec3 distantSky = av_dh_full_sky(vec3(0.0), distantSkyBase,
+                    skyViewRay, skyPlayerPos, skyPlayerRay, skyGlare,
+                    skyVdotL, Dither, distantCtx);
+                distantSky = get_fog_main(vec3(texcoord, 1.0), skyPlayerPos,
+                    distantSky, 1.0, distantSkyBase, skyVdotL, Dither, true);
+                Color.rgb = mix(Color.rgb, distantSky, dhFade);
+            }
+        }
+    #endif
+
     #ifdef VOXY
         if(texture(depthtex1, texcoord).r >= 1) {
             vec4 VxData = texture(colortex16, texcoord);
             Color.rgb = mix(Color.rgb, VxData.rgb, VxData.a);
         }
-    #endif 
+    #endif
+
+    #if AV_HORIZON_DEBUG_MODE == 2
+        // Show actual screen-space layer boundaries ON TOP of the normal sky.
+        // This mode costs additional depth reads and is for diagnosis only.
+        int sourceID = av_horizon_source(texcoord);
+        vec2 pixelStep = 1.5 / resolution;
+        bool border = sourceID != av_horizon_source(texcoord + vec2(pixelStep.x, 0.0)) ||
+                      sourceID != av_horizon_source(texcoord - vec2(pixelStep.x, 0.0)) ||
+                      sourceID != av_horizon_source(texcoord + vec2(0.0, pixelStep.y)) ||
+                      sourceID != av_horizon_source(texcoord - vec2(0.0, pixelStep.y));
+        if (border) {
+            // White boundary reveals which raster layer makes the straight edge.
+            Color.rgb = vec3(16.0);
+        } else {
+            // A mild overlay identifies the source without hiding the scene.
+            Color.rgb = mix(Color.rgb, av_horizon_source_color(sourceID), 0.20);
+        }
+    #endif
 }

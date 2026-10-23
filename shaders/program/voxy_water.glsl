@@ -131,8 +131,10 @@
 #define CLOUD_SPEED 2 // [0 1 2 3 4 5 6]
 #define CLOUD_QUALITY 5 // [2 3 4 5 6 7 9]
 #define CLOUD_STYLE 2 // [0 1 2 3]
-#define AV_CLOUD_BASE_HEIGHT 360.0 // [240.0 280.0 320.0 360.0 420.0 480.0 560.0 640.0 800.0 1000.0]
-#define AV_CLOUD_LAYER_THICKNESS 200.0 // [100.0 160.0 200.0 240.0 320.0 400.0 500.0]
+#define AV_CLOUD_BASE_HEIGHT 220.0 // [160.0 180.0 200.0 220.0 240.0 280.0 320.0 360.0 420.0 480.0 560.0]
+#define AV_CLOUD_LAYER_THICKNESS 160.0 // [80.0 120.0 160.0 200.0 240.0 320.0 400.0]
+#define AV_WISPY_CLOUD_BASE_HEIGHT 420.0 // [300.0 340.0 380.0 400.0 420.0 460.0 500.0 560.0 640.0]
+#define AV_WISPY_CLOUD_THICKNESS 40.0 // [20.0 30.0 40.0 60.0 80.0 120.0]
 #define AURORA_BOREALIS
 #define AURORA_STRENGTH 0.2 // [0.1 0.11 0.12 0.13 0.14 0.15 0.16 0.17 0.18 0.19 0.2 0.21 0.22 0.23 0.24 0.25 0.26 0.27 0.28 0.29 0.3 0.31 0.32 0.33 0.34 0.35 0.36 0.37 0.38 0.39 0.4 0.41 0.42 0.43 0.44 0.45 0.46 0.47 0.48 0.49 0.5]
 #define AURORA_HEIGHT 3.0 // [1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0]
@@ -1555,22 +1557,52 @@ vec4 get_clouds_flat(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGla
     float Transmittance = exp(-Noise * DENSITY);
     return vec4(CloudColor * Noise * DENSITY, Transmittance);
 }
-vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGlare) {
-    vec2 Wind = vec2(0.1, 0.05) * frameTimeCounter;
-    float Displacement = texture(noisetex, (PlayerPos.xz / PlayerPos.y + Wind) * 0.01).r;
-    float D = Displacement * noiseTextureResolution * 0.01;
-    float Noise = texture(noisetex, (PlayerPos.xz / PlayerPos.y + D) / noiseTextureResolution * 10).b;
-    Noise = pow(Noise, 6);
-    Noise -= texture(noisetex, (PlayerPos.xz / PlayerPos.y - D * 0.5) / noiseTextureResolution * 80).g * 0.05;
-    Noise = max(0, Noise);
+// V26.1.12: wisps occupy a real world-space layer, never an angular sky texture.
+// This lets the camera fly through the clouds instead of dragging them upward.
+vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN,
+                      vec3 SunGlare, float maxDistance) {
+    const float bottomY = AV_WISPY_CLOUD_BASE_HEIGHT;
+    const float topY = bottomY + AV_WISPY_CLOUD_THICKNESS;
+    if (abs(PlayerPosN.y) < 0.0001 || maxDistance <= 0.0)
+        return vec4(0.0, 0.0, 0.0, 1.0);
 
-    float Transmittance = exp(-Noise * 5 * 0.5);
-    float VdotL = dot(ViewPosN, slpN);
-    float MiePhase = max(xlf_phase(VdotL, 0.7), 1 / PI);
-    vec3 Scattering = MiePhase * SUN_DIRECT + SKY_GROUND * 4 * ISOTROPIC_PHASE + SunGlare;
-    Scattering *= (1 - Transmittance) / 0.5;
+    float t0 = (bottomY - cameraPosition.y) / PlayerPosN.y;
+    float t1 = (topY - cameraPosition.y) / PlayerPosN.y;
+    float entry = max(0.0, min(t0, t1));
+    float leave = min(max(t0, t1), maxDistance);
+    if (leave <= entry + 0.001) return vec4(0.0, 0.0, 0.0, 1.0);
 
-    return vec4(Scattering, Transmittance);
+    // Thin, lightweight volume: three samples, fixed world-space density.
+    const int wispySteps = 3;
+    float stepLength = (leave - entry) / float(wispySteps);
+    vec3 pos = cameraPosition + PlayerPosN * (entry + stepLength * 0.5);
+    vec2 wind = frameTimeCounter * vec2(12.0, 6.0) * CLOUD_SPEED;
+    float transmittance = 1.0;
+    vec3 scattering = vec3(0.0);
+    float phase = max(xlf_phase(dot(ViewPosN, slpN), 0.7), 1.0 / PI);
+    vec3 lightColor = (SKY_GROUND * 3.5 + SunGlare) * ISOTROPIC_PHASE
+                       + SUN_DIRECT * phase;
+    for (int i = 0; i < wispySteps; ++i) {
+        vec2 uv = (pos.xz - wind) * 0.00013;
+        float shape = texture(noisetex, uv).r;
+        float detail = texture(noisetex, uv * 3.2 + vec2(0.23, 0.47)).b;
+        float vertical = smoothstep(bottomY, bottomY + 9.0, pos.y)
+                       * (1.0 - smoothstep(topY - 9.0, topY, pos.y));
+        float density = smoothstep(0.45, 0.78, shape)
+                      * (0.65 + 0.35 * detail) * vertical;
+        float attenuation = exp(-density * stepLength * 0.035);
+        scattering += lightColor * (1.0 - attenuation) * transmittance;
+        transmittance *= attenuation;
+        pos += PlayerPosN * stepLength;
+    }
+    // Near the geometric horizon, transition gently into the background air.
+    float fade = 1.0 - smoothstep(1800.0, 4400.0, entry);
+    return vec4(scattering * fade, mix(1.0, transmittance, fade));
+}
+
+vec4 get_clouds_wispy(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN,
+                      vec3 SunGlare) {
+    return get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare, 1000000.0);
 }
 vec4 get_clouds_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare, float Dither, float maxDistance) {
     // Aurora Viva V26.1.6: fixed WORLD Y, not a plane attached to the camera.
@@ -1739,31 +1771,49 @@ vec4 get_clouds_blocky_volumetric(vec3 ViewPosN, vec3 PlayerPosN, vec3 SunGlare,
     return FinalColor;
 }
 vec3 get_clouds(vec3 ViewPosN, vec3 PlayerPos, vec3 PlayerPosN, vec3 SunGlare, vec3 SkyColor, float Dither) {
-    vec4 CloudColor; vec3 OgColor = SkyColor;
-
-    #if (defined DOUBLE_CLOUD_LAYERS) && (CLOUD_STYLE != 0)
-        #if CLOUD_STYLE == 1 || CLOUD_STYLE == 2
-            CloudColor = get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
-        #elif CLOUD_STYLE == 3
-            CloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, true);
-        #endif
-        SkyColor = blend_vl(SkyColor, CloudColor);
-    #endif
-    
-    #if CLOUD_STYLE == 0
-        return SkyColor;
-    #elif CLOUD_STYLE == 1
-        CloudColor = get_clouds_flat(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
-    #elif CLOUD_STYLE == 2
-        CloudColor = get_clouds_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither);
-    #elif CLOUD_STYLE == 3
-        CloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, false);
-    #endif
-    SkyColor = blend_vl(SkyColor, CloudColor);
-
-    SkyColor = mix(OgColor, SkyColor, linstep(0, 0.2, PlayerPosN.y) * (CLOUD_OPACITY + 0.5));
-
+    vec3 originalSky = SkyColor;
+#if CLOUD_STYLE == 0
     return SkyColor;
+#elif CLOUD_STYLE == 2
+    vec4 mainCloud = get_clouds_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither);
+#ifdef DOUBLE_CLOUD_LAYERS
+    vec4 highCloud = get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
+    // Order is based on world altitude, not a permanent foreground overlay.
+    if (cameraPosition.y > AV_WISPY_CLOUD_BASE_HEIGHT && PlayerPosN.y < 0.0) {
+        SkyColor = blend_vl(SkyColor, mainCloud);
+        SkyColor = blend_vl(SkyColor, highCloud);
+    } else {
+        SkyColor = blend_vl(SkyColor, highCloud);
+        SkyColor = blend_vl(SkyColor, mainCloud);
+    }
+#else
+    SkyColor = blend_vl(SkyColor, mainCloud);
+#endif
+#else
+    vec4 cloudColor;
+#ifdef DOUBLE_CLOUD_LAYERS
+#if CLOUD_STYLE == 1
+    cloudColor = get_clouds_wispy(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
+    SkyColor = blend_vl(SkyColor, cloudColor);
+#elif CLOUD_STYLE == 3
+    cloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, true);
+    SkyColor = blend_vl(SkyColor, cloudColor);
+#endif
+#endif
+#if CLOUD_STYLE == 1
+    cloudColor = get_clouds_flat(ViewPosN, PlayerPos, PlayerPosN, SunGlare);
+#elif CLOUD_STYLE == 3
+    cloudColor = get_clouds_blocky_volumetric(ViewPosN, PlayerPosN, SunGlare, Dither, false);
+#endif
+    SkyColor = blend_vl(SkyColor, cloudColor);
+#endif
+    // When the camera is above the real volume, looking downward must NOT
+    // hide clouds. Original code zeroed the weight for every negative ray.
+    float viewFactor = PlayerPosN.y >= 0.0
+        ? linstep(0.0, 0.2, PlayerPosN.y)
+        : (cameraPosition.y > AV_CLOUD_BASE_HEIGHT
+            ? linstep(0.0, 0.2, -PlayerPosN.y) : 0.0);
+    return mix(originalSky, SkyColor, clamp(viewFactor * (CLOUD_OPACITY + 0.5), 0.0, 1.0));
 }
 // Very simple and inaccurate, but it's better than nothing.
 float water_fog(vec3 ScreenPos) {

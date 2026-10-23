@@ -394,5 +394,42 @@ option.AV_DH_HORIZON_FADE_START=DH Horizon Fade Start
 option.AV_DH_HORIZON_FADE_START.comment=Fraction of the distant-horizon render distance where distant terrain starts fading into the shader sky. Larger values keep more distant detail, but may expose a rectangular cutoff.
 
 # Aurora Viva V26.1.7 - shared atmosphere and foreground clouds
-option.AV_CLOUD_BASE_HEIGHT.comment=World Y of the cloud base. 360 default; clouds stay fixed as you fly. At high altitude, clouds can appear in front of terrain.
-option.AV_CLOUD_LAYER_THICKNESS.comment=Thickness of the volumetric cloud layer. 200 default, not camera-relative.
+option.AV_CLOUD_BASE_HEIGHT.comment=World Y of the main cloud base. 220 default; clouds are fixed in the world. At high altitude, clouds can appear in front of terrain.
+option.AV_CLOUD_LAYER_THICKNESS.comment=Thickness of the main cloud layer. 160 default, not camera-relative.
+
+# Aurora Viva V26.1.8 - diagnostic; mode 0 keeps the V26.1.7 image unchanged.
+option.AV_HORIZON_DEBUG_MODE=Horizon Diagnostics
+option.AV_HORIZON_DEBUG_MODE.comment=0 Normal; 1 Color layer mask (blue sky, green vanilla terrain, magenta DH, yellow hand); 2 Overlay depth layer borders in white. Set 0 after testing.
+value.AV_HORIZON_DEBUG_MODE.0=0 - Normal
+value.AV_HORIZON_DEBUG_MODE.1=1 - Layer colors
+value.AV_HORIZON_DEBUG_MODE.2=2 - Boundary overlay
+
+value.AV_HORIZON_DEBUG_MODE.3=3 - DH fade coverage (red to green)
+option.AV_DH_TRUE_SKY_BLEND=Match Distant Terrain to Full Sky
+option.AV_DH_TRUE_SKY_BLEND.comment=Blend very far DH terrain into the fully rendered sky, matching clouds, celestial bodies, and atmospheric fog. May cost GPU time when much distant terrain is visible.
+value.AV_DH_TRUE_SKY_BLEND.0=Off - legacy fog blend
+value.AV_DH_TRUE_SKY_BLEND.1=On - full sky blend
+
+# Aurora Viva V26.1.10 - atmospheric pipeline
+screen.AV_ATMOS_PIPELINE_SETTINGS=Atmospheric Pipeline
+option.AV_ATMOS_PIPELINE=Unified Atmosphere
+option.AV_ATMOS_PIPELINE.comment=On: common fog model for sky and terrain; Off: original V26.1.9 pipeline (A/B).
+option.AV_ATMOS_MAX_PATH=Atmosphere Trace Range
+option.AV_ATMOS_MAX_PATH.comment=How far light extinction integrates before reaching its asymptotic sky value; affects horizon haze.
+
+# Aurora Viva V26.1.11 - shared atmospheric visibility (experimental)
+screen.AV_AIR_VISIBILITY_SETTINGS=Air Visibility / Horizon
+option.AV_AIR_VISIBILITY=Natural Horizon Haze
+option.AV_AIR_VISIBILITY.comment=On: fade both normal terrain and DH LOD into the same existing air colour, even in clear weather; avoids re-rendering celestial bodies on far DH pixels. Off: prior V26.1.10 behaviour.
+value.AV_AIR_VISIBILITY.0=Off - V26.1.10 comparison
+value.AV_AIR_VISIBILITY.1=On - shared visibility (experimental)
+option.AV_AIR_HAZE_START=Haze Starts (blocks)
+option.AV_AIR_HAZE_START.comment=Distance before natural air haze starts; higher keeps nearby terrain crisp.
+option.AV_AIR_HAZE_END=Fully Hazy at DH Range
+option.AV_AIR_HAZE_END.comment=Fraction of the DH draw distance at which terrain becomes invisible. Smaller hides the square cutoff earlier but also hides more far detail.
+
+# Aurora Viva V26.1.12 - fixed-altitude secondary clouds
+option.AV_WISPY_CLOUD_BASE_HEIGHT=High Cloud Base Y
+option.AV_WISPY_CLOUD_BASE_HEIGHT.comment=World Y of the thin upper clouds; default 420. They stay put when you fly.
+option.AV_WISPY_CLOUD_THICKNESS=High Cloud Thickness
+option.AV_WISPY_CLOUD_THICKNESS.comment=Real volume thickness of the upper wisps; default 40 blocks.
